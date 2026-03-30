@@ -1,102 +1,74 @@
-# IMC Prosperity 4 Backtester
+# IMC Prosperity 4 — Stochastic Backtesting Engine
 
-This repository contains a Python-based backtester designed in preparation for the [IMC Prosperity 4 challenge](https://prosperity.imc.com/). 
+An advanced, custom-built backtesting framework designed for the [IMC Prosperity 4 challenge](https://prosperity.imc.com/).
 
-**Key Notes:**
-* **Origin:** This project is heavily based on [jmerle/imc-prosperity-3-backtester](https://github.com/jmerle/imc-prosperity-3-backtester), but it has been rewritten to utilize a more Object-Oriented Programming (OOP) style. 
-* **Current Status:** The codebase is up to date with the Prosperity 4 tutorial round.
-* **License:** MIT License.
+**Attribution & Origins:** This repository is a heavily modified and mathematically enhanced fork of [Kevin Fu's Prosperity 4 Backtester](https://github.com/kevin-fu1/imc-prosperity-4-backtester) (which was originally inspired by `jmerle/imc-prosperity-3-backtester`). We have retained the excellent Object-Oriented Programming (OOP) architecture from Kevin's build, but restructured the data ingestion for modular team development and replaced the default deterministic matching engine with a custom Stochastic Fill Model.
+
+**License:** MIT License
 
 ---
 
-**Usage:**
+## 1. The Quant Philosophy: Why We Built This
 
-**Basic usage:**
+Standard open-source backtesters rely on **Deterministic Matching** (Price-Time Priority). If a passive limit order touches the market's mid-price, the engine assumes a 100% fill rate. In high-frequency market making, this is a dangerous assumption that leads to overfitted PnL and ignores **Adverse Selection** (getting filled exactly when the market is crashing through your price level).
 
-Run the backtester on an algorithm using all data from round 0
-```bash
- $ python -m prosperity4bt <path to algorithm file> 0
- ```
+### Our Solution: The Stochastic Fill Engine
+To simulate realistic market microstructure, this engine evaluates passive limit orders using a probabilistic Monte Carlo execution model at every time step. We model the probability of execution `P(fill)` using two primary microstructural features:
 
-Run the backtester on an algorithm using all data from round 0, day '-2'
-```bash
- $ python -m prosperity4bt <path to algorithm file> 0--2
- ```
+* **Volume Imbalance (Order Book Pressure):** `Imbalance = V_bid / (V_bid + V_ask)`
+  If Imbalance approaches 1.0 (heavy buy pressure), passive **Sell** orders receive a massive probability multiplier, simulating an aggressive market buyer crossing the spread.
+* **Spatial Decay (Distance to Mid-Price):** `Distance Penalty = e^(-0.5 * |P_mid - P_order|)`
+  Simulates the Poisson arrival of market orders. Deep out-of-the-money limit orders have exponentially lower probabilities of being reached by liquidity-taking flow.
 
-If you see: `No module named 'datamodel'`, set PYTHONPATH to the folder containing datamodel.py:  
-```bash
- $env:PYTHONPATH="<path to>\imc-prosperity-4-backtester\prosperity4bt"
-```
-
-**Run/Debug from Pycham**
-
-Add Run/Debug Configuration:
-
-![Pycham Config](images/pycharm.png)
 ---
-## Overall Structure & How It Works
 
-The architecture of the program is modularized to cleanly separate data loading, simulation execution, and order matching. Below is the structural diagram of the backtester:
+## 2. Overall Structure & Execution Flow
 
-![Backtester Architecture](images/backtester.png)
+The architecture of the program is modularized to cleanly separate data loading, simulation execution, and order matching. 
 
-### Component Breakdown & Execution Flow
-
-Based on the architecture diagram, the system operates through the following primary components and execution steps:
-
+### Component Breakdown
 #### 1. The `BackTester` (Main Controller)
 This is the top-level driver of the simulation:
-* **Initialization:** It begins by executing the `Load Algorithm Module` step to ingest your trading logic.
-* **Iteration:** It initializes an empty `results = []` list and iterates through a nested loop: `for each round` and `for each day`. For every day, it executes the `Run Test` function, which calls the `TestRunner`. It then appends the output to the `results` list.
-* **Completion:** Once all rounds and days are processed, it calls `Merge Results` to combine the data and triggers `Write Output File` to produce a consolidated log (e.g., `2026-03-01_08-35-51.log` containing trading results).
+* **Initialization:** Ingests your trading logic via the CLI.
+* **Iteration:** Iterates through a nested loop for each requested round and day. For every day, it executes the `TestRunner` and appends the daily output to a results list.
+* **Completion:** Once all rounds are processed, it merges the data and produces a consolidated log file (e.g., `2026-03-30_08-35-51.log`).
 
 #### 2. The `TestRunner` (Daily Simulator)
-The `TestRunner` is responsible for simulating the market environment for a single day:
-* **Read Data:** It triggers `Read Data` which calls the `BackDataReader` to read the market data from 2 csv files (price and trade). The reader parses the files (e.g.`prices_round_1_day_0.csv` and `trades_round_1_day_0.csv`) and returns a `BacktestData` object. This step yields `Result - Stage 0`.
-* **Timestamp Loop:** For each timestamp in the loaded data (`for each timestamp`), the runner executes a sequence of events:
-    1. **Initialize TradeState:** Prepares the current state of the market.
-    2. **Trade:** Creates a `TradingState` object and passes it into the user's `Algorithm`. 
-    3. **Algorithm Execution:** The user's `Algorithm` processes the state and returns proposed orders and a string as `TraderData`. Any standard output (`stdout`) generated by the algorithm is captured as `lambda_log`. This execution step yields `Result - Stage 1`.
-    4. **Create Activity Logs:** The `ActivityLogCreator` steps in to record the actions, orders, and market state of the current timestamp. This yields `Result - Stage 2`.
-    5. **Match Orders:** The proposed orders are passed to the `OrderMatchMaker`, which simulates the exchange mechanics to fill orders against the historical order book. This yields `Result - Stage 3`.
-* **Results Aggregation:** After the timestamp loop concludes, the overall day's simulation yields `Result - Stage 4`, which is returned back to the `BackTester`.
+Responsible for simulating the market environment for a single day:
+* **Read Data:** Triggers the `BackDataReader` to ingest CSV price and trade files, returning a `BacktestData` object.
+* **Timestamp Loop:** For each timestamp:
+    1. **Initialize State:** Prepares the `TradingState` object.
+    2. **Algorithm Execution:** Passes the state into your custom `Trader` class. Your algorithm processes the state and returns proposed orders.
+    3. **Create Activity Logs:** Records the actions, standard output (`lambda_log`), and market state.
+    4. **Match Orders:** Passes proposed orders to the `OrderMatchMaker`. **[UPGRADED]** This is where our Stochastic Engine evaluates the order book imbalance and spatial distance to probabilistically fill orders against historical data.
 
-#### 3. Core Helper Modules
-* **`BackDataReader`:** Handles the file ingestion of CSV price and trade data into programmatic objects.
-* **`ActivityLogCreator`:** Responsible for standardizing and formatting the activity logs for later analysis and debugging.
-* **`OrderMatchMaker`:** The internal simulation engine that determines which algorithm orders execute and updating positions.
-## Explanation of Data Models
+#### 3. Explanation of Data Models
+The backtester relies on specific data models to process information cleanly. 
+* **`datamodel.py`**: Contains the core data models shared between the engine and your custom Algorithm. **(CRITICAL: Do not change this file. Modifying it will break compatibility with the official Prosperity submission environment).**
+* **`models/input.py`**: Captures raw market data from CSVs (`PriceRow`, `TradeRow`) and structures it into the `BacktestData` source model.
+* **`models/output.py`**: Captures the generated test results (`BacktestResult`) which are eventually written to the final output `.log` file.
 
-The backtester relies on a specific set of data models to process market information and log simulation results cleanly. 
+---
 
-* **`datamodel.py`**: This file contains the core data models that are shared between the `BackTester` and your custom `Algorithm`. **(Please do not change this file)**. Modifying it may break compatibility with the official Prosperity environment.
-* **`models/` directory**: The models located within the `models` folder are specifically defined for the internal operations of the `BackTester`.
-* **Input Data Models (`models/input.py`)**: This file defines the models that capture the raw market data from the input files. During the setup phase, data is extracted from the price data files and trade data files:
+## 3. 🚀 Running the Simulation (Team Setup)
 
-  **Price Data:**
-  
-  ![Price Data](images/price_data.png)
+### Initial Setup
+Do not install dependencies globally. Use a virtual environment.
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+pip install -r requirements.txt
 
-  **Trade Data:**
-  
-  ![Trade Data](images/trade_data.png)
+We use a custom Typer CLI to run experiments cleanly.
 
-  This raw data is then structured and filled into the `BacktestData` model, which acts as the data source for the simulation:
+**Syntax:** `python main.py [ALGO_PATH] [ROUND] --data [DATA_DIR] --match-trades [MODE]`
 
-  **Backtest Data:**
-  
-  ![Backtest Data](images/back_test_data.png)
+**Run with realistic probabilistic matching (Recommended):**
+This mode simulates adverse selection and order book queueing.
+```bash
+python main.py algo/strategy_v1.py 0 --data data/ --match-trades probabilistic
 
-* **Result Data Models (`models/output.py`)**: Models defined here are responsible for capturing the test result data generated during the simulation. 
-  
-  Once the backtest is complete, the system compiles the findings into a `BacktestResult` object:
-
-  **Backtest Result:**
-  
-  ![Backtest Result](images/result_final_stage.png)
-
-  Finally, this structured result data is written directly into the standard output log file so you can review your algorithm's performance and activities:
-
-  **Output Log File:**
-  
-  ![Output Log File](images/out_put_log_file.png)
+**Develop & Commit:** Write your code in the `algo/` folder, then stage and commit.
+```bash
+git add algo/tomatoes.py
+git commit -m "Implement rolling Z-score for Tomatoes"

@@ -5,4 +5,4 @@ venv/
 .env
 
 backtests/*.log
-.DS_Store (if on Mac)
+.DS_Store
