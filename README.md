@@ -72,3 +72,123 @@ python main.py algo/strategy_v1.py 0 --data data/ --match-trades probabilistic
 ```bash
 git add algo/tomatoes.py
 git commit -m "Implement rolling Z-score for Tomatoes"
+## Algorithm Boilerplate (Required for Visualizer)
+
+In order for the community visualizer to parse our backtest logs, **every algorithm file must include the custom Logger class** and properly flush its data at the end of the `run` method.
+
+Please copy and paste this exact layout when creating a new strategy in `algo/my_strategy.py`:
+
+```python
+import json
+import jsonpickle
+from typing import Any, List, Dict
+from datamodel import Listing, Observation, Order, OrderDepth, ProsperityEncoder, Symbol, Trade, TradingState
+
+# ==========================================
+# VISUALIZER LOGGER BOILERPLATE (DO NOT EDIT)
+# ==========================================
+class Logger:
+    def __init__(self) -> None:
+        self.logs = ""
+        self.max_log_length = 3750
+
+    def print(self, *objects: Any, sep: str = " ", end: str = "\n") -> None:
+        self.logs += sep.join(map(str, objects)) + end
+
+    def flush(self, state: TradingState, orders: dict[Symbol, list[Order]], conversions: int, trader_data: str) -> None:
+        base_length = len(self.to_json([
+            self.compress_state(state, ""),
+            self.compress_orders(orders),
+            conversions, "", "",
+        ]))
+
+        max_item_length = (self.max_log_length - base_length) // 3
+
+        print(self.to_json([
+            self.compress_state(state, self.truncate(state.traderData, max_item_length)),
+            self.compress_orders(orders),
+            conversions,
+            self.truncate(trader_data, max_item_length),
+            self.truncate(self.logs, max_item_length),
+        ]))
+        self.logs = ""
+
+    def compress_state(self, state: TradingState, trader_data: str) -> list[Any]:
+        return [
+            state.timestamp, trader_data,
+            self.compress_listings(state.listings),
+            self.compress_order_depths(state.order_depths),
+            self.compress_trades(state.own_trades),
+            self.compress_trades(state.market_trades),
+            state.position,
+            self.compress_observations(state.observations),
+        ]
+
+    def compress_listings(self, listings: dict[Symbol, Listing]) -> list[list[Any]]:
+        return [[l.symbol, l.product, l.denomination] for l in listings.values()]
+
+    def compress_order_depths(self, order_depths: dict[Symbol, OrderDepth]) -> dict[Symbol, list[Any]]:
+        return {s: [od.buy_orders, od.sell_orders] for s, od in order_depths.items()}
+
+    def compress_trades(self, trades: dict[Symbol, list[Trade]]) -> list[list[Any]]:
+        return [[t.symbol, t.price, t.quantity, t.buyer, t.seller, t.timestamp] for arr in trades.values() for t in arr]
+
+    def compress_observations(self, observations: Observation) -> list[Any]:
+        conversion_observations = {p: [o.bidPrice, o.askPrice, o.transportFees, o.exportTariff, o.importTariff, o.sugarPrice, o.sunlightIndex] for p, o in observations.conversionObservations.items()}
+        return [observations.plainValueObservations, conversion_observations]
+
+    def compress_orders(self, orders: dict[Symbol, list[Order]]) -> list[list[Any]]:
+        return [[o.symbol, o.price, o.quantity] for arr in orders.values() for o in arr]
+
+    def to_json(self, value: Any) -> str:
+        return json.dumps(value, cls=ProsperityEncoder, separators=(",", ":"))
+
+    def truncate(self, value: str, max_length: int) -> str:
+        lo, hi = 0, min(len(value), max_length)
+        out = ""
+        while lo <= hi:
+            mid = (lo + hi) // 2
+            candidate = value[:mid]
+            if len(candidate) < len(value): candidate += "..."
+            if len(json.dumps(candidate)) <= max_length:
+                out = candidate
+                lo = mid + 1
+            else: hi = mid - 1
+        return out
+
+logger = Logger()
+
+# ==========================================
+# YOUR TRADING ALGORITHM
+# ==========================================
+class Trader:
+    def run(self, state: TradingState) -> tuple[dict[Symbol, list[Order]], int, str]:
+        result = {}
+        conversions = 0
+        trader_data = ""
+
+        # --- TODO: ADD YOUR STRATEGY LOGIC HERE ---
+        
+        # Example dummy state output for formatting
+        s = "dummy_data" 
+        
+        # --- END STRATEGY LOGIC ---
+
+        # ----------------------------------------------------
+        # CRITICAL: Format data for the visualizer before returning
+        # ----------------------------------------------------
+        encoded_trader_data = jsonpickle.encode(s)
+        logger.flush(state, result, conversions, encoded_trader_data)
+        
+        return result, conversions, encoded_trader_data
+```
+
+---
+
+## Visualizing Results
+
+After a successful run, the engine generates a timestamped `.log` file in the `backtests/` directory.
+
+We integrate directly with the open-source community visualizer to analyze PnL, inventory risk, and trade execution:
+1. Navigate to: [IMC Prosperity 4 Visualizer](https://kevin-fu1.github.io/imc-prosperity-4-visualizer/)
+2. Drag and drop your `.log` file into the browser.
