@@ -8,7 +8,7 @@ An advanced, custom-built backtesting framework designed for the [IMC Prosperity
 
 ---
 
-## 1. The Quant Philosophy: Why We Built This
+## The Quant Philosophy: Why We Built This
 
 Standard open-source backtesters rely on **Deterministic Matching** (Price-Time Priority). If a passive limit order touches the market's mid-price, the engine assumes a 100% fill rate. In high-frequency market making, this is a dangerous assumption that leads to overfitted PnL and ignores **Adverse Selection** (getting filled exactly when the market is crashing through your price level).
 
@@ -22,7 +22,7 @@ To simulate realistic market microstructure, this engine evaluates passive limit
 
 ---
 
-## 2. Overall Structure & Execution Flow
+## Overall Structure & Execution Flow
 
 The architecture of the program is modularized to cleanly separate data loading, simulation execution, and order matching. 
 
@@ -50,7 +50,7 @@ The backtester relies on specific data models to process information cleanly.
 
 ---
 
-## 3. 🚀 Running the Simulation (Team Setup)
+## Running the Simulation (Team Setup)
 
 ### Initial Setup
 Do not install dependencies globally. Use a virtual environment.
