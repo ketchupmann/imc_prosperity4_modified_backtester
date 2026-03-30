@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+backtests/*.log
+.DS_Store (if on Mac)
