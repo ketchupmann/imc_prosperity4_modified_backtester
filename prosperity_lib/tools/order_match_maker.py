@@ -38,11 +38,15 @@ class OrderMatchMaker:
             for order in sorted(buy_order, key=lambda o: o.price, reverse=True):
                 if self.trade_matching_mode == TradeMatchingMode.probabilistic:
                     if self.__simulate_probabilistic_fill(order):
-                        # The dice roll passed! Fill the remaining resting volume.
-                        volume = order.quantity
-                        trade = self.__create_buy_order(order, volume, order.price, "PROBABILISTIC_SELLER")
-                        new_trades.append(trade)
-                        break 
+                        # Allow fill ratio to be 0 (market order didn't reach our queue position)
+                        fill_ratio = random.uniform(0.0, 1.0) 
+                        volume = int(order.quantity * fill_ratio)
+                        
+                        # Only execute if we actually got hit
+                        if volume > 0:
+                            trade = self.__create_buy_order(order, volume, order.price, "PROBABILISTIC_SELLER")
+                            new_trades.append(trade)
+                        break
                 else:
                     new_trade = self.__match_buy_order_from_market_trades(order, market_trades.get(product, []))
                     if len(new_trade) > 0:
@@ -53,10 +57,14 @@ class OrderMatchMaker:
             for order in sorted(sell_order, key=lambda o: o.price):
                 if self.trade_matching_mode == TradeMatchingMode.probabilistic:
                     if self.__simulate_probabilistic_fill(order):
-                        # The dice roll passed! Fill the remaining resting volume.
-                        volume = abs(order.quantity)
-                        trade = self.__create_sell_order(order, volume, order.price, "PROBABILISTIC_BUYER")
-                        new_trades.append(trade)
+                        # Allow fill ratio to be 0
+                        fill_ratio = random.uniform(0.0, 1.0)
+                        volume = int(abs(order.quantity) * fill_ratio)
+                        
+                        # Only execute if we actually got hit
+                        if volume > 0:
+                            trade = self.__create_sell_order(order, volume, order.price, "PROBABILISTIC_BUYER")
+                            new_trades.append(trade)
                         break
                 else:
                     new_trade = self.__match_sell_order_from_market_trades(order, market_trades.get(product, []))
@@ -211,7 +219,7 @@ class OrderMatchMaker:
         distance_penalty = math.exp(-0.5 * distance)
 
         # Base Probability Logic
-        base_prob = 0.5 
+        base_prob = 0.05 
         
         if order.quantity < 0: # SELL order
             adjusted_prob = base_prob * (imbalance * 2) * distance_penalty

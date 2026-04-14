@@ -58,7 +58,15 @@ Do not install dependencies globally. Use a virtual environment.
 python -m venv venv
 source venv/bin/activate  # On Windows use: venv\Scripts\activate
 pip install -r requirements.txt
+```
 
+### Data Setup
+Historical tick data is massive and is ignored by Git. Set it up locally:
+1. Create a `data/` folder in the root directory.
+2. Inside `data/`, create subfolders for each round (e.g., `round0/`).
+3. Drop the official IMC CSV files into their respective folders.
+
+### Executing a Backtest
 We use a custom Typer CLI to run experiments cleanly.
 
 **Syntax:** `python main.py [ALGO_PATH] [ROUND] --data [DATA_DIR] --match-trades [MODE]`
@@ -67,11 +75,29 @@ We use a custom Typer CLI to run experiments cleanly.
 This mode simulates adverse selection and order book queueing.
 ```bash
 python main.py algo/strategy_v1.py 0 --data data/ --match-trades probabilistic
+```
 
-**Develop & Commit:** Write your code in the `algo/` folder, then stage and commit.
+---
+
+## Team Git Workflow (Strict)
+
+To prevent merge conflicts and protect the core engine infrastructure, **do not push directly to the `main` branch.** Every new strategy must be developed on its own branch.
+
+**1. Create a Feature Branch:**
+```bash
+git checkout -b feature/tomatoes-zscore-alpha
+```
+
+**2. Develop & Commit:** Write your code in the `algo/` folder, then stage and commit.
 ```bash
 git add algo/tomatoes.py
 git commit -m "Implement rolling Z-score for Tomatoes"
+```
+
+**3. Push & Pull Request:** Push your branch to GitHub and open a Pull Request so the team can review the PnL before merging.
+
+---
+
 ## Algorithm Boilerplate (Required for Visualizer)
 
 In order for the community visualizer to parse our backtest logs, **every algorithm file must include the custom Logger class** and properly flush its data at the end of the `run` method.
@@ -190,5 +216,6 @@ class Trader:
 After a successful run, the engine generates a timestamped `.log` file in the `backtests/` directory.
 
 We integrate directly with the open-source community visualizer to analyze PnL, inventory risk, and trade execution:
+
 1. Navigate to: [IMC Prosperity 4 Visualizer](https://kevin-fu1.github.io/imc-prosperity-4-visualizer/)
 2. Drag and drop your `.log` file into the browser.
